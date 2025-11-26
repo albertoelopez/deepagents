@@ -1,22 +1,54 @@
 """Custom tools for the CLI agent."""
 
+import os
 from typing import Any, Literal
 
 import requests
 from markdownify import markdownify
-from tavily import TavilyClient
 
 from deepagents_cli.config import settings
 
-# Initialize Tavily client if API key is available
-tavily_client = TavilyClient(api_key=settings.tavily_api_key) if settings.has_tavily else None
+# Initialize search clients based on available API keys
+_tavily_client = None
+_serper_api_key = os.environ.get("SERPER_API_KEY")
+
+if settings.has_tavily:
+    try:
+        from tavily import TavilyClient
+        _tavily_client = TavilyClient(api_key=settings.tavily_api_key)
+    except ImportError:
+        pass
+
+# Try to import duckduckgo_search
+_ddg_available = False
+try:
+    from duckduckgo_search import DDGS
+    _ddg_available = True
+except ImportError:
+    pass
+
+
+def is_search_available() -> bool:
+    """Check if any search provider is available."""
+    return _tavily_client is not None or _serper_api_key is not None or _ddg_available
+
+
+def get_search_provider() -> str | None:
+    """Get the name of the active search provider."""
+    if _tavily_client is not None:
+        return "Tavily"
+    if _serper_api_key is not None:
+        return "Serper"
+    if _ddg_available:
+        return "DuckDuckGo"
+    return None
 
 
 def http_request(
     url: str,
     method: str = "GET",
     headers: dict[str, str] | None = None,
-    data: str | dict | None = None,
+    data: dict[str, Any] | None = None,
     params: dict[str, str] | None = None,
     timeout: int = 30,
 ) -> dict[str, Any]:
@@ -26,7 +58,7 @@ def http_request(
         url: Target URL
         method: HTTP method (GET, POST, PUT, DELETE, etc.)
         headers: HTTP headers to include
-        data: Request body data (string or dict)
+        data: Request body data as JSON dict
         params: URL query parameters
         timeout: Request timeout in seconds
 
@@ -41,10 +73,7 @@ def http_request(
         if params:
             kwargs["params"] = params
         if data:
-            if isinstance(data, dict):
-                kwargs["json"] = data
-            else:
-                kwargs["data"] = data
+            kwargs["json"] = data
 
         response = requests.request(**kwargs)
 
@@ -87,13 +116,90 @@ def http_request(
         }
 
 
+def _search_duckduckgo(query: str, max_results: int = 5) -> dict[str, Any]:
+    """Search using DuckDuckGo (free, no API key needed)."""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            return {
+                "results": [
+                    {
+                        "title": r.get("title", ""),
+                        "url": r.get("href", ""),
+                        "content": r.get("body", ""),
+                        "score": 1.0,  # DDG doesn't provide scores
+                    }
+                    for r in results
+                ],
+                "query": query,
+                "provider": "duckduckgo",
+            }
+    except Exception as e:
+        return {"error": f"DuckDuckGo search error: {e!s}", "query": query}
+
+
+def _search_serper(query: str, max_results: int = 5) -> dict[str, Any]:
+    """Search using Serper API (Google results)."""
+    try:
+        response = requests.post(
+            "https://google.serper.dev/search",
+            headers={
+                "X-API-KEY": _serper_api_key,
+                "Content-Type": "application/json",
+            },
+            json={"q": query, "num": max_results},
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        results = []
+        for r in data.get("organic", [])[:max_results]:
+            results.append({
+                "title": r.get("title", ""),
+                "url": r.get("link", ""),
+                "content": r.get("snippet", ""),
+                "score": 1.0,
+            })
+
+        return {
+            "results": results,
+            "query": query,
+            "provider": "serper",
+        }
+    except Exception as e:
+        return {"error": f"Serper search error: {e!s}", "query": query}
+
+
+def _search_tavily(
+    query: str,
+    max_results: int = 5,
+    topic: str = "general",
+    include_raw_content: bool = False,
+) -> dict[str, Any]:
+    """Search using Tavily API."""
+    try:
+        result = _tavily_client.search(
+            query,
+            max_results=max_results,
+            include_raw_content=include_raw_content,
+            topic=topic,
+        )
+        result["provider"] = "tavily"
+        return result
+    except Exception as e:
+        return {"error": f"Tavily search error: {e!s}", "query": query}
+
+
 def web_search(
     query: str,
     max_results: int = 5,
     topic: Literal["general", "news", "finance"] = "general",
     include_raw_content: bool = False,
 ):
-    """Search the web using Tavily for current information and documentation.
+    """Search the web for current information and documentation.
+
+    Uses multiple providers with fallback: Tavily → Serper → DuckDuckGo (free).
 
     This tool searches the web and returns relevant results. After receiving results,
     you MUST synthesize the information into a natural, helpful response for the user.
@@ -112,6 +218,7 @@ def web_search(
             - content: Relevant excerpt from the page
             - score: Relevance score (0-1)
         - query: The original search query
+        - provider: Which search provider was used
 
     IMPORTANT: After using this tool:
     1. Read through the 'content' field of each result
@@ -120,21 +227,29 @@ def web_search(
     4. Cite sources by mentioning the page titles or URLs
     5. NEVER show the raw JSON to the user - always provide a formatted response
     """
-    if tavily_client is None:
-        return {
-            "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable.",
-            "query": query,
-        }
+    # Try Tavily first (best quality)
+    if _tavily_client:
+        result = _search_tavily(query, max_results, topic, include_raw_content)
+        if "error" not in result:
+            return result
 
-    try:
-        return tavily_client.search(
-            query,
-            max_results=max_results,
-            include_raw_content=include_raw_content,
-            topic=topic,
-        )
-    except Exception as e:
-        return {"error": f"Web search error: {e!s}", "query": query}
+    # Try Serper as backup (Google results)
+    if _serper_api_key:
+        result = _search_serper(query, max_results)
+        if "error" not in result:
+            return result
+
+    # Fallback to DuckDuckGo (free, no API key)
+    if _ddg_available:
+        result = _search_duckduckgo(query, max_results)
+        if "error" not in result:
+            return result
+
+    # No providers available
+    return {
+        "error": "No search provider available. Set TAVILY_API_KEY or SERPER_API_KEY, or install duckduckgo-search (pip install duckduckgo-search).",
+        "query": query,
+    }
 
 
 def fetch_url(url: str, timeout: int = 30) -> dict[str, Any]:

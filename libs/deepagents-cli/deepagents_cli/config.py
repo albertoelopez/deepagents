@@ -364,13 +364,17 @@ def create_model() -> BaseChatModel:
     """Create the appropriate model based on available API keys.
 
     Uses the global settings instance to determine which model to create.
+    Priority: OpenAI → Anthropic → Google → Ollama (local)
 
     Returns:
-        ChatModel instance (OpenAI or Anthropic)
+        ChatModel instance (OpenAI, Anthropic, Google, or Ollama)
 
     Raises:
         SystemExit if no API key is configured
     """
+    # Check for Ollama (doesn't need API key, just model name)
+    ollama_model = os.environ.get("OLLAMA_MODEL")
+
     if settings.has_openai:
         from langchain_openai import ChatOpenAI
 
@@ -393,19 +397,31 @@ def create_model() -> BaseChatModel:
     if settings.has_google:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        model_name = os.environ.get("GOOGLE_MODEL", "gemini-3-pro-preview")
+        model_name = os.environ.get("GOOGLE_MODEL", "gemini-2.0-flash")
         console.print(f"[dim]Using Google Gemini model: {model_name}[/dim]")
         return ChatGoogleGenerativeAI(
             model=model_name,
             temperature=0,
             max_tokens=None,
         )
+    if ollama_model:
+        from langchain_ollama import ChatOllama
+
+        base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        console.print(f"[dim]Using Ollama model: {ollama_model} at {base_url}[/dim]")
+        return ChatOllama(
+            model=ollama_model,
+            base_url=base_url,
+            temperature=0.7,
+        )
     console.print("[bold red]Error:[/bold red] No API key configured.")
     console.print("\nPlease set one of the following environment variables:")
     console.print("  - OPENAI_API_KEY     (for OpenAI models like gpt-5-mini)")
     console.print("  - ANTHROPIC_API_KEY  (for Claude models)")
     console.print("  - GOOGLE_API_KEY     (for Google Gemini models)")
+    console.print("  - OLLAMA_MODEL       (for local Ollama models like llama3.2)")
     console.print("\nExample:")
     console.print("  export OPENAI_API_KEY=your_api_key_here")
+    console.print("  export OLLAMA_MODEL=llama3.2  # for local models")
     console.print("\nOr add it to your .env file.")
     sys.exit(1)

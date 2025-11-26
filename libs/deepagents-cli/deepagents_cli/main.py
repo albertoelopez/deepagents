@@ -25,7 +25,7 @@ from deepagents_cli.integrations.sandbox_factory import (
     get_default_working_dir,
 )
 from deepagents_cli.skills import execute_skills_command, setup_skills_parser
-from deepagents_cli.tools import fetch_url, http_request, web_search
+from deepagents_cli.tools import fetch_url, get_search_provider, http_request, is_search_available, web_search
 from deepagents_cli.ui import TokenTracker, show_help
 
 
@@ -176,18 +176,18 @@ async def simple_cli(
             )
         console.print()
 
-    if not settings.has_tavily:
+    if not is_search_available():
         console.print(
-            "[yellow]⚠ Web search disabled:[/yellow] TAVILY_API_KEY not found.",
+            "[yellow]⚠ Web search disabled:[/yellow] No search provider configured.",
             style=COLORS["dim"],
         )
-        console.print("  To enable web search, set your Tavily API key:", style=COLORS["dim"])
-        console.print("    export TAVILY_API_KEY=your_api_key_here", style=COLORS["dim"])
-        console.print(
-            "  Or add it to your .env file. Get your key at: https://tavily.com",
-            style=COLORS["dim"],
-        )
+        console.print("  To enable web search, either:", style=COLORS["dim"])
+        console.print("    pip install duckduckgo-search  (free, no API key)", style=COLORS["dim"])
+        console.print("    export TAVILY_API_KEY=...  or  export SERPER_API_KEY=...", style=COLORS["dim"])
         console.print()
+    else:
+        provider = get_search_provider()
+        console.print(f"[dim]Web search: {provider}[/dim]")
 
     console.print("... Ready to code! What would you like to build?", style=COLORS["agent"])
 
@@ -290,7 +290,7 @@ async def _run_agent_session(
     """
     # Create agent with conditional tools
     tools = [http_request, fetch_url]
-    if settings.has_tavily:
+    if is_search_available():
         tools.append(web_search)
 
     agent, composite_backend = create_agent_with_config(

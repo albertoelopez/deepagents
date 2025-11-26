@@ -6,12 +6,16 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11,<4.0"
 dependencies = [
-  "deepagents==0.2.8",
+  "deepagents>=0.2.8",
   "requests",
   "rich>=13.0.0",
   "prompt-toolkit>=3.0.52",
   "langchain-openai>=0.1.0",
+  "langchain-anthropic>=0.1.0",
+  "langchain-google-genai>=2.0.0",
+  "langchain-ollama>=0.2.0",
   "tavily-python",
+  "duckduckgo-search>=6.0.0",
   "python-dotenv",
   "daytona>=0.113.0",
   "modal>=0.65.0",

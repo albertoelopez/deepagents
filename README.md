@@ -40,6 +40,51 @@ result = agent.invoke({"messages": [{"role": "user", "content": "What is LangGra
 
 The agent created with `create_deep_agent` is compiled [LangGraph StateGraph](https://docs.langchain.com/oss/python/langgraph/overview), so it can used it with streaming, human-in-the-loop, memory, or Studio just like any LangGraph agent. See our [quickstarts repo](https://github.com/langchain-ai/deepagents-quickstarts) for more examples.
 
+## ⚙️ Configuration
+
+Deep Agents supports multiple LLM providers and additional services. Configure them using environment variables or a `.env` file in your project root.
+
+### API Keys Setup
+
+Create a `.env` file in your project directory:
+
+```bash
+# LLM Provider (choose one or multiple)
+GOOGLE_API_KEY=your_google_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional: Web Search (for Tavily integration)
+TAVILY_API_KEY=your_tavily_api_key_here
+
+# Optional: Local Models (no API key needed)
+OLLAMA_MODEL=llama3.2
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Optional: Customize model selection
+GOOGLE_MODEL=gemini-2.0-flash
+ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+OPENAI_MODEL=gpt-5-mini
+```
+
+### Where to Get API Keys
+
+- **Google AI Studio**: [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **Anthropic**: [https://console.anthropic.com/](https://console.anthropic.com/)
+- **OpenAI**: [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- **Tavily** (web search): [https://tavily.com/](https://tavily.com/)
+- **Ollama** (local): [https://ollama.com/](https://ollama.com/)
+
+### Model Priority
+
+When multiple API keys are configured, the CLI uses this priority order:
+1. OpenAI (if `OPENAI_API_KEY` is set)
+2. Anthropic (if `ANTHROPIC_API_KEY` is set)
+3. Google (if `GOOGLE_API_KEY` is set)
+4. Ollama (if `OLLAMA_MODEL` is set)
+
+**Note**: Your `.env` file is automatically ignored by git (security best practice). Never commit API keys to version control.
+
 ## Customizing Deep Agents
 
 There are several parameters you can pass to `create_deep_agent`.

@@ -85,6 +85,36 @@ When multiple API keys are configured, the CLI uses this priority order:
 
 **Note**: Your `.env` file is automatically ignored by git (security best practice). Never commit API keys to version control.
 
+### 🎯 Recommended: Qwen3 (Local Model with Tools + Thinking)
+
+**Qwen3** is the ideal local model for Deep Agents as it supports **both tool calling AND thinking/reasoning**:
+
+```bash
+# Install Ollama first: https://ollama.com/
+# Then pull Qwen3 (recommended sizes):
+ollama pull qwen3:8b      # Good balance (5.2GB) - Recommended
+ollama pull qwen3:14b     # Better reasoning (9.3GB)
+ollama pull qwen3:30b     # Best performance (19GB)
+
+# Update .env:
+OLLAMA_MODEL=qwen3:8b
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+**Why Qwen3?**
+
+| Feature | Qwen3 | Llama 3.1 | DeepSeek R1 |
+|---------|-------|-----------|-------------|
+| **Tool/Function Calling** | ✅ | ✅ | ❌ |
+| **Thinking/Reasoning** | ✅ | ❌ | ✅ |
+| **Agent Tasks** | ✅ Expert | ✅ Good | ❌ |
+| **Multilingual (100+ languages)** | ✅ | Limited | Limited |
+| **Works with Deep Agents** | ✅ Perfect | ✅ Tools only | ❌ No tools |
+
+**Other Local Options:**
+- `llama3.1:8b` - Tools only, no thinking (good fallback)
+- `deepseek-r1:latest` - Thinking only, no tools (won't work with Deep Agents)
+
 ## Customizing Deep Agents
 
 There are several parameters you can pass to `create_deep_agent`.
